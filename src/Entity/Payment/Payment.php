@@ -17,7 +17,7 @@ final class Payment
     #[ORM\GeneratedValue]
     #[ORM\Column(type: 'integer')]
     private int $id;
-    #[ORM\OneToOne(inversedBy: "request", targetEntity: User::class)]
+    #[ORM\ManyToOne(targetEntity: User::class, inversedBy: 'user')]
     private User $user;
     #[ORM\Column(type: 'string')]
     private string $siteId;
