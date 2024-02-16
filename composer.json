@@ -12,8 +12,6 @@
         "symfony/cache": "^6.4",
         "qiwi/bill-payments-php-sdk": "^0.2.2",
         "nutgram/nutgram": "^3.20.2",
-        "php-di/php-di": "^7.0",
-        "laminas/laminas-config-aggregator": "^1.14",
         "monolog/monolog": "3.x-dev"
     },
     "require-dev": {
