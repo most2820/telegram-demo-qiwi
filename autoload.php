@@ -14,7 +14,7 @@ $dotenv->load();
 
 $nutgram = new Nutgram(env('TELEGRAM_TOKEN'));
 
-(require __DIR__ . '/config/container.php')($nutgram->getContainer());
+(require __DIR__ . '/config/dependencies.php')($nutgram->getContainer());
 (require __DIR__ . '/config/middleware.php')($nutgram);
 (require __DIR__ . '/config/routes.php')($nutgram);
 
