@@ -6,12 +6,14 @@ namespace App\Entity\Payment;
 
 final class Amount
 {
+    const CURRENCY_RUB = "RUB";
+
     private string $currency;
     private int $value;
 
     public function __construct(
         string $currency,
-        int  $value,
+        int    $value,
     )
     {
         $this->currency = $currency;

@@ -8,31 +8,25 @@ use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
-#[ORM\HasLifecycleCallbacks]
 #[ORM\Table(name: 'user')]
-final class User
+class User
 {
     #[ORM\Column(type: 'bigint', unique: true)]
     #[ORM\Id]
-    private int $id;
-
+    private $id;
     #[ORM\Column(type: 'string')]
     private string $firstName;
-
     #[ORM\Column(type: 'string', nullable: true)]
     private ?string $lastName;
-
     #[ORM\Column(type: 'string', nullable: true)]
     private ?string $username;
-
     #[ORM\Column(type: 'integer', nullable: true)]
     private int $balance;
-
     #[ORM\Column(type: 'datetime_immutable')]
     private DateTimeImmutable $createDate;
 
     public function __construct(
-        int               $id,
+        int|string               $id,
         string            $firstName,
         ?string           $lastName,
         ?string           $username,
@@ -47,7 +41,7 @@ final class User
         $this->createDate = $create_date;
     }
 
-    public function getId(): int
+    public function getId(): int|string
     {
         return $this->id;
     }
@@ -77,7 +71,7 @@ final class User
         return $this->balance;
     }
 
-    public function addToBalance(int $amount)
+    public function addToBalance(int $amount): void
     {
         $this->balance += $amount;
     }

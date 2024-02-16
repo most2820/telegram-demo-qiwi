@@ -2,34 +2,34 @@
 
 declare(strict_types=1);
 
-namespace App\Entity\Payment;
+namespace App\Service;
 
-use App\Entity\Flusher;
-use App\Entity\User\UserRepository;
-use App\Entity\User\UserService;
+use App\Entity\Payment\Amount;
+use App\Entity\Payment\Payment;
+use App\Entity\Payment\Status;
+use App\Repository\PaymentRepository;
+use App\Repository\UserRepository;
 use DateTimeImmutable;
+use Doctrine\ORM\EntityManagerInterface;
 use Qiwi\Api\BillPayments;
 
 final class PaymentService
 {
     private PaymentRepository $paymentRepository;
-    private Flusher $flusher;
+    private EntityManagerInterface $entityManager;
     private UserRepository $userRepository;
-    private UserService $userService;
     private BillPayments $billPayments;
 
     public function __construct(
-        PaymentRepository $paymentRepository,
-        Flusher           $flusher,
-        UserRepository    $userRepository,
-        UserService       $userService,
-        BillPayments      $billPayments
+        PaymentRepository      $paymentRepository,
+        EntityManagerInterface $entityManager,
+        UserRepository         $userRepository,
+        BillPayments           $billPayments
     )
     {
         $this->paymentRepository = $paymentRepository;
-        $this->flusher = $flusher;
+        $this->entityManager = $entityManager;
         $this->userRepository = $userRepository;
-        $this->userService = $userService;
         $this->billPayments = $billPayments;
     }
 
@@ -45,11 +45,12 @@ final class PaymentService
         $user = $this->userRepository->get($userId);
 
         $response = $this->billPayments->createBill(
-            $userId . "_" . rand(1000, 9999) . "_" . time(),
+            $user->getId() . "_" . rand(1000, 9999) . "_" . time(),
             [
                 'amount' => $amount,
-                'currency' => 'RUB',
+                'currency' => Amount::CURRENCY_RUB,
                 'comment' => $userId . "_" . rand(1000, 9999),
+                'account' => $user->getId()
             ]
         );
 
@@ -72,13 +73,11 @@ final class PaymentService
             $response['recipientPhoneNumber'],
         );
         $this->paymentRepository->add($check);
-        $this->flusher->flush();
+        $this->entityManager->flush();
         return $check;
     }
 
-    public function payed(
-        int $id
-    ): Payment
+    public function payed(int $id): Payment
     {
         $payment = $this->paymentRepository->get($id);
         if ($payment->isPaid()) {
@@ -91,7 +90,7 @@ final class PaymentService
         $payment->payed();
         $user = $this->userRepository->get($payment->getUser()->getId());
         $user->addToBalance($payment->getAmountValue());
-        $this->flusher->flush();
+        $this->entityManager->flush();
         return $payment;
     }
 }

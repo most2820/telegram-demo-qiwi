@@ -2,77 +2,159 @@
 
 declare(strict_types=1);
 
+use App\Console\FixtureLoadCommand;
 use App\Entity\Payment\Payment;
-use App\Entity\Payment\PaymentRepository;
 use App\Entity\User\User;
-use App\Entity\User\UserRepository;
+use App\Repository\PaymentRepository;
+use App\Repository\UserRepository;
+use Doctrine\ORM\ORMSetup;
 use League\Container\Container;
+use Psr\Log\LoggerInterface;
 use Qiwi\Api\BillPayments;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Cache\Adapter\FilesystemAdapter;
-use Doctrine\Common\Cache\Psr6\DoctrineProvider;
 use Doctrine\Common\EventManager;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Mapping\Driver\AttributeDriver;
 use Doctrine\ORM\Mapping\UnderscoreNamingStrategy;
-use Doctrine\ORM\Tools\Setup;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
+use Monolog\Processor\ProcessorInterface;
+use Doctrine\Migrations;
+use Doctrine\Migrations\DependencyFactory;
+use Doctrine\Migrations\Tools\Console\Command;
 
 return function (Container $container) {
     $container->addShared('config', require __DIR__ . '/config.php');
 
-    $container->addShared(EntityManagerInterface::class)
-        ->setConcrete(function () use ($container) {
-            $settings = $container->get('config')['doctrine'];
-            $config = Setup::createConfiguration(
-                $settings['dev_mode'],
-                $settings['proxy_dir'],
-                $settings['cache_dir']
-                    ? DoctrineProvider::wrap(new FilesystemAdapter('', 0, $settings['cache_dir']))
-                    : DoctrineProvider::wrap(new ArrayAdapter())
-            );
+    $container->addShared(LoggerInterface::class)->setConcrete(function () use ($container) {
+        $config = $container->get('config')['logger'];
 
-            $config->setMetadataDriverImpl(new AttributeDriver($settings['metadata_dirs']));
+        $level = $config['debug'] ? Logger::DEBUG : Logger::INFO;
 
-            $config->setNamingStrategy(new UnderscoreNamingStrategy());
+        $log = new Logger('API');
 
-            $eventManager = new EventManager();
+        if ($config['stderr']) {
+            $log->pushHandler(new StreamHandler('php://stderr', $level));
+        }
 
-            foreach ($settings['subscribers'] as $name) {
-                $subscriber = $container->get($name);
-                $eventManager->addEventSubscriber($subscriber);
+        if (!empty($config['file'])) {
+            $log->pushHandler(new StreamHandler($config['file'], $level));
+        }
+
+        if (!empty($config['processors'])) {
+            foreach ($config['processors'] as $class) {
+                /** @var ProcessorInterface $processor */
+                $processor = $container->get($class);
+                $log->pushProcessor($processor);
             }
+        }
 
-            return EntityManager::create(
-                $settings['connection'],
-                $config,
-                $eventManager
-            );
-        });
+        return $log;
+    });
 
-    $container->addShared(Connection::class)
-        ->setConcrete(function () use ($container) {
-            $em = $container->get(EntityManagerInterface::class);
-            return $em->getConnection();
-        });
+    $container->addShared(EntityManagerInterface::class)->setConcrete(function () use ($container) {
+        $settings = $container->get('config')['doctrine'];
 
-    $container->addShared(BillPayments::class)
-        ->setConcrete(function () {
-            return new BillPayments($_ENV['QIWI_TOKEN']);
-        });
+        $config = ORMSetup::createAttributeMetadataConfiguration(
+            $settings['metadata_dirs'],
+            $settings['dev_mode'],
+            $settings['proxy_dir'],
+            $settings['cache_dir'] ? new FilesystemAdapter('', 0, $settings['cache_dir']) : new ArrayAdapter()
+        );
 
-    $container->addShared(UserRepository::class)
-        ->setConcrete(function () use ($container) {
-            $em = $container->get(EntityManagerInterface::class);
-            $repo = $em->getRepository(User::class);
-            return new UserRepository($em, $repo);
-        });
+        $config->setAutoGenerateProxyClasses(true);
 
-    $container->addShared(PaymentRepository::class)
-        ->setConcrete(function () use ($container) {
-            $em = $container->get(EntityManagerInterface::class);
-            $repo = $em->getRepository(Payment::class);
-            return new PaymentRepository($em, $repo);
-        });
+        $config->setNamingStrategy(new UnderscoreNamingStrategy());
+
+        $eventManager = new EventManager();
+
+        return EntityManager::create($settings['connection'], $config, $eventManager);
+    });
+
+    $container->addShared(Connection::class)->setConcrete(function () use ($container) {
+        $entityManager = $container->get(EntityManagerInterface::class);
+        return $entityManager->getConnection();
+    });
+
+    $container->addShared(DependencyFactory::class)->setConcrete(function () use ($container) {
+        $entityManager = $container->get(EntityManagerInterface::class);
+
+        $configuration = new Doctrine\Migrations\Configuration\Configuration();
+        $configuration->addMigrationsDirectory('App\Data\Migration', __DIR__ . '/../src/Data/Migration');
+        $configuration->setAllOrNothing(true);
+        $configuration->setCheckDatabasePlatform(false);
+
+        $storageConfiguration = new Migrations\Metadata\Storage\TableMetadataStorageConfiguration();
+        $storageConfiguration->setTableName('migrations');
+
+        $configuration->setMetadataStorageConfiguration($storageConfiguration);
+
+        return DependencyFactory::fromEntityManager(
+            new Migrations\Configuration\Migration\ExistingConfiguration($configuration),
+            new Migrations\Configuration\EntityManager\ExistingEntityManager($entityManager)
+        );
+    });
+
+    $container->addShared(Command\ExecuteCommand::class)->setConcrete(function () use ($container) {
+        $factory = $container->get(DependencyFactory::class);
+        return new Command\ExecuteCommand($factory);
+    });
+
+    $container->addShared(Command\MigrateCommand::class)->setConcrete(function () use ($container) {
+        $factory = $container->get(DependencyFactory::class);
+        return new Command\MigrateCommand($factory);
+    });
+
+    $container->addShared(Command\LatestCommand::class)->setConcrete(function () use ($container) {
+        $factory = $container->get(DependencyFactory::class);
+        return new Command\LatestCommand($factory);
+    });
+
+    $container->addShared(Command\ListCommand::class)->setConcrete(function () use ($container) {
+        $factory = $container->get(DependencyFactory::class);
+        return new Command\ListCommand($factory);
+    });
+
+    $container->addShared(Command\StatusCommand::class)->setConcrete(function () use ($container) {
+        $factory = $container->get(DependencyFactory::class);
+        return new Command\StatusCommand($factory);
+    });
+
+    $container->addShared(Command\UpToDateCommand::class)->setConcrete(function () use ($container) {
+        $factory = $container->get(DependencyFactory::class);
+        return new Command\UpToDateCommand($factory);
+    });
+
+    $container->addShared(Command\DiffCommand::class)->setConcrete(function () use ($container) {
+        $factory = $container->get(DependencyFactory::class);
+        return new Command\DiffCommand($factory);
+    });
+
+    $container->addShared(Command\GenerateCommand::class)->setConcrete(function () use ($container) {
+        $factory = $container->get(DependencyFactory::class);
+        return new Command\GenerateCommand($factory);
+    });
+
+    $container->addShared(FixtureLoadCommand::class)->setConcrete(function () use ($container) {
+        return new FixtureLoadCommand(
+            $container->get(EntityManagerInterface::class),
+            $container->get('config')['console']['fixture_paths'],
+        );
+    });
+
+    $container->addShared(BillPayments::class)->setConcrete(function () use ($container){
+        return new BillPayments($container->get('config')['qiwi_token']);
+    });
+
+    $container->addShared(UserRepository::class)->setConcrete(function () use ($container) {
+        $entityManager = $container->get(EntityManagerInterface::class);
+        return new UserRepository($entityManager, $entityManager->getRepository(User::class));
+    });
+
+    $container->addShared(PaymentRepository::class)->setConcrete(function () use ($container) {
+        $entityManager = $container->get(EntityManagerInterface::class);
+        return new PaymentRepository($entityManager, $entityManager->getRepository(Payment::class));
+    });
 };

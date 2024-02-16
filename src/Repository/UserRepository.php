@@ -2,36 +2,32 @@
 
 declare(strict_types=1);
 
-namespace App\Entity\User;
+namespace App\Repository;
 
-use App\Entity\NotFoundException;
+use App\Entity\User\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 
 final class UserRepository
 {
-    private EntityRepository $repository;
     private EntityManagerInterface $entityManager;
+    private EntityRepository $entityRepository;
 
     public function __construct(
         EntityManagerInterface $entityManager,
-        EntityRepository       $repository
+        EntityRepository       $entityRepository
     )
     {
         $this->entityManager = $entityManager;
-        $this->repository = $repository;
+        $this->entityRepository = $entityRepository;
     }
 
-    public function get(
-        int $id
-    ): User|NotFoundException
+    public function get(int $id): ?User
     {
-        return $this->repository->find($id) ?? throw new NotFoundException('User not found');
+        return $this->entityRepository->find($id);
     }
 
-    public function add(
-        User $user
-    )
+    public function add(User $user): void
     {
         $this->entityManager->persist($user);
     }

@@ -2,23 +2,25 @@
 
 declare(strict_types=1);
 
-namespace App\Entity\User;
+namespace App\Service;
 
-use App\Entity\Flusher;
+use App\Entity\User\User;
+use App\Repository\UserRepository;
+use Doctrine\ORM\EntityManagerInterface;
 use SergiX44\Nutgram\Telegram\Types\User\User as UserType;
 
 final class UserService
 {
     private UserRepository $userRepository;
-    private Flusher $flusher;
+    private EntityManagerInterface $entityManager;
 
     public function __construct(
-        UserRepository $userRepository,
-        Flusher        $flusher
+        UserRepository         $userRepository,
+        EntityManagerInterface $entityManager
     )
     {
         $this->userRepository = $userRepository;
-        $this->flusher = $flusher;
+        $this->entityManager = $entityManager;
     }
 
     public function create(
@@ -33,7 +35,7 @@ final class UserService
             new \DateTimeImmutable()
         );
         $this->userRepository->add($user);
-        $this->flusher->flush();
+        $this->entityManager->flush();
         return $user;
     }
 }

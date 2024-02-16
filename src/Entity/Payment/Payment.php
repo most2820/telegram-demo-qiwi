@@ -11,7 +11,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\Table(name: 'payment')]
-final class Payment
+class Payment
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]

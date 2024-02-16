@@ -1,0 +1,24 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use SergiX44\Nutgram\Nutgram;
+use Symfony\Component\Console\Application;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/** @var Nutgram $nutgram */
+$nutgram = require_once dirname(__DIR__) . '/autoload.php';
+
+$commands = $nutgram->getContainer()->get('config')['console']['commands'];
+
+$cli = new Application('Console');
+
+if (!empty($commands)) {
+    foreach ($commands as $name) {
+        $cli->add($nutgram->getContainer()->get($name));
+    }
+}
+
+$cli->run();
